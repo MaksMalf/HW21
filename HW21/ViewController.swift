@@ -1,15 +1,25 @@
 import UIKit
 
+protocol DisplaysThePasswordProtocol {
+    func displaysThePasswordLabel(_ password: String)
+    func finishPasswordSelection(_ password: String)
+    func cancellPasswordSelection(_ password: String)
+}
+
 class ViewController: UIViewController {
+
+    var bruteForce = BruteForce(passwordToUnlock: "")
+    private let queue = OperationQueue()
 
     private let passwordLabel: UILabel = {
         let label = UILabel()
         label.backgroundColor = .white
-        label.font = UIFont(name: "Apple SD Gothic NEO", size: 16)
+        label.font = UIFont(name: "Apple SD Gothic NEO", size: 20)
         label.text = ""
-        label.textAlignment = .center
-        label.textColor =  #colorLiteral(red: 0.2789022923, green: 0.2789022923, blue: 0.2789022923, alpha: 1)
-        label.tintColor =  #colorLiteral(red: 0.5741509199, green: 0.5741508603, blue: 0.5741509199, alpha: 1)
+        label.textAlignment = .left
+        label.layer.cornerRadius = 6
+        label.clipsToBounds = true
+        label.textColor = #colorLiteral(red: 0.2789022923, green: 0.2789022923, blue: 0.2789022923, alpha: 1)
         label.translatesAutoresizingMaskIntoConstraints = false
 
         return label
@@ -20,60 +30,65 @@ class ViewController: UIViewController {
         textField.backgroundColor = .white
         textField.borderStyle = .roundedRect
         textField.placeholder = "Enter your password"
-        textField.font = UIFont(name: "Apple SD Gothic NEO", size: 16)
-        textField.textColor =  #colorLiteral(red: 0.2789022923, green: 0.2789022923, blue: 0.2789022923, alpha: 1)
-        textField.tintColor =  #colorLiteral(red: 0.5741509199, green: 0.5741508603, blue: 0.5741509199, alpha: 1)
-        textField.clearButtonMode = .always
+        textField.font = UIFont(name: "Apple SD Gothic NEO", size: 20)
+        textField.textColor = #colorLiteral(red: 0.2789022923, green: 0.2789022923, blue: 0.2789022923, alpha: 1)
+        textField.tintColor = #colorLiteral(red: 0.5741509199, green: 0.5741508603, blue: 0.5741509199, alpha: 1)
         textField.isSecureTextEntry = true
         textField.translatesAutoresizingMaskIntoConstraints = false
 
         return textField
     }()
 
-    private let passwordSelectionButton: UIButton = {
+    private let startButton: UIButton = {
         let button = UIButton()
         button.backgroundColor = .white
-        button.setTitle("Sign up", for: .normal)
+        button.setTitle("Start", for: .normal)
         button.setTitleColor(#colorLiteral(red: 0.2789022923, green: 0.2789022923, blue: 0.2789022923, alpha: 1), for: .normal)
         button.layer.cornerRadius = 15
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(passwordGeneration), for: .touchUpInside)
+        button.addTarget(self, action: #selector(startPasswordSelection), for: .touchUpInside)
 
         return button
     }()
 
-    private let backgroundColorButton: UIButton = {
+    private let stopButton: UIButton = {
         let button = UIButton()
         button.backgroundColor = .white
-        button.setTitle("Press me", for: .normal)
+        button.setTitle("Stop", for: .normal)
         button.setTitleColor(#colorLiteral(red: 0.2789022923, green: 0.2789022923, blue: 0.2789022923, alpha: 1), for: .normal)
         button.layer.cornerRadius = 15
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(backgroundReset), for: .touchUpInside)
+        button.addTarget(self, action: #selector(stopPasswordSelection), for: .touchUpInside)
 
         return button
     }()
 
-    @objc func passwordGeneration() {
-        let len = 8
-        let pswdChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
-        let rndPswd = String((0..<len).compactMap{ _ in pswdChars.randomElement() })
+    private var activityIndicator: UIActivityIndicatorView = {
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.color = .gray
+        indicator.translatesAutoresizingMaskIntoConstraints = false
 
-        passwordTextField.text = rndPswd
+        return indicator
+    }()
+
+    @objc func startPasswordSelection() {
+        guard !bruteForce.isExecuting else { return }
+        let newPassword = passwordTextField.text ?? ""
+        bruteForce = BruteForce(passwordToUnlock: newPassword)
+        bruteForce.delegate = self
+        queue.addOperation(bruteForce)
+        activityIndicator.startAnimating()
     }
 
-    var backColor: Bool = false {
-        didSet {
-            view.backgroundColor = backColor ? .blue : .red
+    @objc func stopPasswordSelection() {
+        if bruteForce.isExecuting {
+            bruteForce.cancel()
         }
-    }
-
-    @objc func backgroundReset() {
-        backColor.toggle()
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = #colorLiteral(red: 0.721568644, green: 0.8862745166, blue: 0.5921568871, alpha: 1)
         setupHierarhy()
         setupLayout()
     }
@@ -81,8 +96,9 @@ class ViewController: UIViewController {
     private func setupHierarhy() {
         view.addSubview(passwordLabel)
         view.addSubview(passwordTextField)
-        view.addSubview(passwordSelectionButton)
-        view.addSubview(backgroundColorButton)
+        view.addSubview(startButton)
+        view.addSubview(stopButton)
+        view.addSubview(activityIndicator)
     }
 
     private func setupLayout() {
@@ -98,16 +114,37 @@ class ViewController: UIViewController {
             passwordTextField.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.7),
             passwordTextField.heightAnchor.constraint(equalToConstant: 40),
 
-            passwordSelectionButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            passwordSelectionButton.topAnchor.constraint(equalTo: passwordTextField.bottomAnchor, constant: 20),
-            passwordSelectionButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.7),
-            passwordSelectionButton.heightAnchor.constraint(equalToConstant: 50),
+            startButton.topAnchor.constraint(equalTo: passwordTextField.bottomAnchor, constant: 20),
+            startButton.leftAnchor.constraint(equalTo: passwordTextField.leftAnchor),
+            startButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.3),
+            startButton.heightAnchor.constraint(equalToConstant: 50),
 
-            backgroundColorButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            backgroundColorButton.topAnchor.constraint(equalTo: passwordSelectionButton.bottomAnchor, constant: 10),
-            backgroundColorButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.7),
-            backgroundColorButton.heightAnchor.constraint(equalToConstant: 50)
+            stopButton.topAnchor.constraint(equalTo: passwordTextField.bottomAnchor, constant: 20),
+            stopButton.rightAnchor.constraint(equalTo: passwordTextField.rightAnchor),
+            stopButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.3),
+            stopButton.heightAnchor.constraint(equalToConstant: 50),
+
+            activityIndicator.topAnchor.constraint(equalTo: passwordLabel.topAnchor),
+            activityIndicator.leftAnchor.constraint(equalTo: passwordLabel.rightAnchor, constant: -40),
         ])
     }
 }
 
+extension ViewController: DisplaysThePasswordProtocol {
+
+    func cancellPasswordSelection(_ password: String) {
+        passwordTextField.isSecureTextEntry = false
+        passwordLabel.text = "Пароль не подобран"
+        activityIndicator.stopAnimating()
+    }
+
+    func finishPasswordSelection(_ password: String) {
+        passwordTextField.isSecureTextEntry = false
+        passwordLabel.text = password
+        activityIndicator.stopAnimating()
+    }
+
+    func displaysThePasswordLabel(_ password: String) {
+        passwordLabel.text = password
+    }
+}
